@@ -1,5 +1,7 @@
 import {Product} from "../entities/Product";
 import {Job} from "kue";
+import {CrawlerMetadata} from "../entities/CrawlerMetadata";
+import {Page} from "../entities/Page";
 
 export interface ICrawler<T> {
 
@@ -8,9 +10,9 @@ export interface ICrawler<T> {
 
     extractProductInformationFromSearchPage(page: T): Promise<Array<Product>>;
 
-    extractProductPageFromProductPage(page: T): Promise<Array<Page & Product>>
+    extractProductPageFromProductPage(page: T): Promise<Array<Page>>
 
-    extractProductPageFromSearchPage(page: T): Promise<Array<Page & Product>>
+    extractProductPageFromSearchPage(page: T): Promise<Array<Page>>
 
     extractSearchPageFromProductPage(page: T): Promise<Array<Page>>
 
@@ -24,14 +26,19 @@ export interface ICrawler<T> {
     retrievePageJobContent(): Promise<null>;
 
 
+    setEngineParameter(page: T): Promise<null>;
+
+
     crawlerOnFinishCurrentExtract(page: T): Promise<boolean>;
 
-    crawlerWaitForElement(page: T): Promise<boolean>;
+    crawlerWaitForElementSearchPage(page: T): Promise<boolean>;
+
+    crawlerWaitForElementProductPage(page: T): Promise<boolean>;
 
     crawlerDetectChangeInPage(page: T): Promise<string>;
 
 
-    run(job: Job): Promise<null>
+    run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<null>
 
 }
 

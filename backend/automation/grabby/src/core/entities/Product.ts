@@ -1,5 +1,11 @@
+import {BaseInfo} from "./BaseInfo";
+
 export class Product extends BaseInfo {
 
-    attributes: Array<string>;
+    images: Array<string>;
+
+    attributes: Map<string, string>;
+
+    raw: any;
 
 }

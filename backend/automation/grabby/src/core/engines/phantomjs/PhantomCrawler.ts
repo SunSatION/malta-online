@@ -1,12 +1,15 @@
 import {crawlerPhantomPool} from "../../../crawlers/entertainer/PhantomEntertainerCrawler";
 import {PhantomJS, WebPage} from "phantom";
 
-import {jobQueue, redisClient} from "../../CrawlerJob";
+
 import {ICrawler} from "../../interfaces/ICrawler";
 import {Product} from "../../entities/Product";
 
 import * as es from "elasticsearch";
 import {Job} from "kue";
+import {CrawlerMetadata} from "../../entities/CrawlerMetadata";
+import {Page} from "../../entities/Page";
+import {CrawlerJob} from "../../CrawlerJob";
 
 export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
@@ -16,15 +19,14 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
     private currentCrawlingSite: string = "https://www.theentertainerme.com/search-outlets/index?SearchOutletsForm%5Blocation_id%5D=21&page=10";
 
-    private crawlerIndexingName: string = "entertainerme";
-
     private transactionalSave: boolean = false;
 
     constructor() {
     }
 
-    load(): ICrawler<WebPage> {
-        console.log(this.constructor().toString() + " for  " + this.crawlerIndexingName + " loaded.")
+    load(crawlerMetadata: CrawlerMetadata): ICrawler<WebPage> {
+
+        console.log(this.constructor().toString() + " for  " + crawlerMetadata.crawlerIndexingName + " loaded.")
         return this;
     }
 
@@ -32,9 +34,9 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
     abstract extractProductInformationFromSearchPage(page: WebPage): Promise<Array<Product>>;
 
-    abstract extractProductPageFromProductPage(page: WebPage): Promise<Array<Page & Product>>
+    abstract extractProductPageFromProductPage(page: WebPage): Promise<Array<Page>>
 
-    abstract extractProductPageFromSearchPage(page: WebPage): Promise<Array<Page & Product>>
+    abstract extractProductPageFromSearchPage(page: WebPage): Promise<Array<Page>>
 
     abstract extractSearchPageFromProductPage(page: WebPage): Promise<Array<Page>>
 
@@ -42,13 +44,17 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
     abstract crawlerOnFinishCurrentExtract(page: WebPage): Promise<boolean>;
 
-    abstract crawlerWaitForElement(page: WebPage): Promise<boolean>;
+    abstract crawlerWaitForElementSearchPage(page: WebPage): Promise<boolean>;
+
+    abstract crawlerWaitForElementProductPage(page: WebPage): Promise<boolean>;
 
     abstract crawlerDetectChangeInPage(page: WebPage): Promise<string>;
 
+    abstract setEngineParameter(page: WebPage): Promise<null>;
+
     async retrievePageJobContent(): Promise<null> {
         const page: WebPage = await this.resourcePhantomPromise.createPage();
-        jobQueue.process('page');
+        CrawlerJob.jobQueue.process('page');
         return null;
     }
 
@@ -64,9 +70,9 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
     }
 
 
-    async loopForWaitForElement(this: PhantomCrawler, page: WebPage) {
+    async loopForWaitForElementSearchPage(this: PhantomCrawler, page: WebPage) {
         return new Promise(resolve => {
-            this.crawlerWaitForElement(page).then((isPresent) => {
+            this.crawlerWaitForElementSearchPage(page).then((isPresent) => {
                 console.log("isPresent results: " + isPresent);
                 if (isPresent == true) {
                     resolve();
@@ -80,7 +86,7 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
     }
 
 
-    async run(job: Job): Promise<null> {
+    async run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<null> {
 
         /*
                 jobQueue.process("page_" + this.crawlerIndexingName, function (job, done) {
@@ -89,12 +95,14 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
         */
 
 
-        let currentSite = this.currentCrawlingSite;
+        let currentSite = (<Page>job.data).baseUri + (<Page>job.data).pageUrl;
         console.log("retrieved");
 
         await this.retrieveEngineInstance();
 
         const page: WebPage = await this.resourcePhantomPromise.createPage();
+
+        await this.setEngineParameter(page);
 
         page.property('onConsoleMessage', function (a) {
             console.log(a)
@@ -106,26 +114,55 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
         let newSearchPageToAddToQueue: Array<Page> = new Array<Page>();
 
+        let newProductPageToAddToQueue: Array<Page> = new Array<Page>();
+
+        let newProductInformationToAddToQueue: Array<Product> = new Array<Product>();
+
+        let pageJob: Page = (<Page>(job.data));
+
         let currentProductsToSave: Array<Product> = new Array<Product>();
 
         do {
-
-
-            await this.loopForWaitForElement(page);
-
-
             let newValue: string = null;
-            while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null))) {
-                console.log(newValue);
-                await this.timeout(2000);
-                newValue = await this.crawlerDetectChangeInPage(page);
+
+            switch (pageJob.type) {
+                case "search_page":
+
+                    await this.loopForWaitForElementSearchPage(page);
+
+                    newValue = null;
+                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null))) {
+                        console.log(newValue);
+                        await this.timeout(200);
+                        page.render("debug.png");
+                        newValue = await this.crawlerDetectChangeInPage(page);
+                    }
+                    this.previousElementValueToDetectChange = newValue;
+
+                    newSearchPageToAddToQueue = newSearchPageToAddToQueue.concat(await this.extractSearchPageFromSearchPage(page));
+                    newProductPageToAddToQueue = newProductPageToAddToQueue.concat(await this.extractProductPageFromSearchPage(page));
+                    newProductInformationToAddToQueue = newProductInformationToAddToQueue.concat(await this.extractProductInformationFromSearchPage(page));
+                    break;
+                case "product_page":
+
+                    await this.loopForWaitForElementSearchPage(page);
+
+                    newValue = null;
+                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null))) {
+                        console.log(newValue);
+                        await this.timeout(200);
+                        page.render("debug.png");
+                        newValue = await this.crawlerDetectChangeInPage(page);
+                    }
+                    this.previousElementValueToDetectChange = newValue;
+
+                    newSearchPageToAddToQueue = newSearchPageToAddToQueue.concat(await this.extractSearchPageFromProductPage(page));
+                    newProductPageToAddToQueue = newProductPageToAddToQueue.concat(await this.extractProductPageFromProductPage(page));
+                    newProductInformationToAddToQueue = newProductInformationToAddToQueue.concat(await this.extractProductInformationFromProductPage(page));
             }
-            this.previousElementValueToDetectChange = newValue;
-
-            newSearchPageToAddToQueue = newSearchPageToAddToQueue.concat(await this.extractSearchPageFromSearchPage(page));
 
 
-            //newPagesToAddToQueue = newPagesToAddToQueue.concat(await this.extractProductPageFromProductPage(page));
+            // newProductPagesToAddToQueue = newProductPagesToAddToQueue.concat(await this.extractSearchFromProductPage(page));
 
 
             // console.log(newPagesToAddToQueue);
@@ -135,22 +172,20 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
             // currentProductsToSave = currentProductsToSave.concat(await this.extractProductInformation(page));
 
-            console.log(newSearchPageToAddToQueue);
-
             if (!this.transactionalSave) {
 
                 // create ElasticSearch Index
                 let esClient: es.Client = new es.Client({'host': 'localhost:9200'});
-                if (!(await esClient.indices.exists({index: this.crawlerIndexingName}))) {
+                if (!(await esClient.indices.exists({index: crawlerMetadata.crawlerIndexingName}))) {
                     await esClient.indices.create({
-                        index: this.crawlerIndexingName
+                        index: crawlerMetadata.crawlerIndexingName
                     });
                 }
 
                 // Save Products
-                for (let currentProduct of currentProductsToSave) {
+                for (let currentProduct of newProductInformationToAddToQueue) {
                     console.log(esClient.index<Product>({
-                        index: this.crawlerIndexingName,
+                        index: crawlerMetadata.crawlerIndexingName,
                         type: 'product',
                         body: currentProduct
                     }));
@@ -159,19 +194,20 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
                 let currentPage: any;
                 while ((currentPage = newSearchPageToAddToQueue.pop()) != null) {
-                    console.log("check exists");
-                    redisClient.hexists('page:' + currentPage.crawlingEngine + ":" + this.crawlerIndexingName, currentPage.pageUrl, function (exists) {
+                    // console.log("check exists - " + 'page:' + currentPage.crawlingEngine + ":" + crawlerMetadata.crawlerIndexingName, currentPage.pageUrl );
+                    CrawlerJob.redisClient.hexists('page:' + currentPage.crawlingEngine + ":" + crawlerMetadata.crawlerIndexingName, currentPage.pageUrl, function (err, exists) {
                         if (!exists) {
-                            jobQueue.create('page:' + this.currentPage.crawlingEngine, this.currentPage).save(function (s) {
-                                redisClient.hset(this.currentPage.crawlingEngine + ":" + this.crawlerIndexingName, this.currentPage.pageUrl, null, function () {
+                            CrawlerJob.jobQueue.create('page:' + this.currentPage.crawlingEngine, this.currentPage).save(function (s) {
+                                // console.log('hset created - ' + 'page:' + this.currentPage.crawlingEngine + ":" + this.crawlerIndexingName, this.currentPage.pageUrl)
+                                CrawlerJob.redisClient.hset('page:' + this.currentPage.crawlingEngine + ":" + this.crawlerIndexingName, this.currentPage.pageUrl, new Date().toISOString(), function (d) {
+                                    console.log(d);
                                 });
                             }.bind({currentPage: this.currentPage, crawlerIndexingName: this.crawlerIndexingName}));
 
-                            console.log("added to queue");
+                            // console.log("added to queue");
                         }
-                        ;
                         return 0;
-                    }.bind({currentPage: currentPage, crawlerIndexingName: this.crawlerIndexingName}))
+                    }.bind({currentPage: currentPage, crawlerIndexingName: crawlerMetadata.crawlerIndexingName}))
                 }
             }
         } while (await this.crawlerOnFinishCurrentExtract(page) == false)
@@ -181,10 +217,10 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
 
         await this.releaseEngineInstance();
-        await crawlerPhantomPool.drain();
-        await crawlerPhantomPool.clear();
-        jobQueue.shutdown(200, () => {
-        });
+        //await crawlerPhantomPool.drain();
+        //await crawlerPhantomPool.clear();
+        //CrawlerJob.jobQueue.shutdown(200, () => {
+        //});
         return null;
     }
 

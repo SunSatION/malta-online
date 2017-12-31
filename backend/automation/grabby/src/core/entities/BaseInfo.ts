@@ -1,4 +1,4 @@
-class BaseInfo {
+export class BaseInfo {
 
     title: string;
 
@@ -7,4 +7,7 @@ class BaseInfo {
     exportDate: string;
 
     type: string;
+
+    crawlerIndexingName: string;
+
 }

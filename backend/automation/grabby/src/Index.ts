@@ -1,5 +1,8 @@
 import {CrawlerJob} from "./core/CrawlerJob";
 
+
+const crawlerJobQueue = CrawlerJob.jobQueue;
+
 // import {CrawlerJob, jobQueue} from "./core/CrawlerJob";
 
 // import {CrawlerFactory} from "./core/CrawlerFactoryPhantom";
@@ -29,12 +32,31 @@ async function main() {
 
 //jobQueue.procesxx)
 
-    await new CrawlerJob().run();
+    var crawlerJob = await new CrawlerJob();
+    /*
+        var d = new Page();
+        d.exportDate = new Date().toISOString();
+        d.crawlingEngine = "PhantomEntertainerCrawler";
+        d.title = "Test";
+        d.pageUrl = "/outlets?SearchOutletsForm[location_id]=21";
+        d.baseUri = "https://www.theentertainerme.com";
+    */
+//    crawlerJobQueue.create("search_page:PhantomEntertainerCrawler", d).save((x) => console.log(x))
+    crawlerJob.run();
+
+    /*
+        CrawlerJob.jobQueue.process("page:entertainerme", async function (job: Job, done : any) {
+            console.log(job);
+
+        });
+    */
+
     // console.log("returned");
 
     return 0;
 
 }
+
 
 /*
 setInterval(function () {

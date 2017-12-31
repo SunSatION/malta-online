@@ -4,11 +4,14 @@ import * as kue from "kue";
 import {Job} from "kue";
 import * as fs from "fs";
 import * as path_module from "path";
+import {Page} from "./entities/Page";
 //import {Job} from "kue";
 //import {ICrawler} from "./interfaces/ICrawler";
 //import {PhantomCrawler} from "./engines/phantomjs/PhantomCrawler";
 
 let module_loader: Array<string> = new Array<string>();
+let module_instance: Array<any> = new Array<any>();
+
 
 let redisConfig = {
     host: "localhost",
@@ -32,11 +35,13 @@ let redisConfig = {
     }
 };
 
-export const jobQueue = kue.createQueue(redisConfig);
-
-export const redisClient = rd.createClient(redisConfig);
 
 export class CrawlerJob {
+
+    static jobQueue = kue.createQueue(redisConfig);
+
+    static redisClient = rd.createClient(redisConfig);
+
 
     syncRead(dir, filelist) {
         var fs = fs || require('fs'),
@@ -64,22 +69,29 @@ export class CrawlerJob {
         console.log(crawlerModulesFileList);
         for (var i = 0; i < crawlerModulesFileList.length; i++) {
             if (crawlerModulesFileList[i].endsWith(".js")) {
-                console.log(path_module.basename(crawlerModulesFileList[i], ".js");
-                module_loader[path_module.basename(crawlerModulesFileList[i], ".js")] = require(__dirname + "/../" + crawlerModulesFileList[i]);
+                var pathCrawlerName = path_module.basename(crawlerModulesFileList[i], ".js");
 
+                module_loader[pathCrawlerName] = require(__dirname + "/../" + crawlerModulesFileList[i]);
+                module_instance[pathCrawlerName] = eval("new module_loader[\"" + pathCrawlerName + "\"]." + pathCrawlerName + "()");
+                console.log("page:" + module_instance[pathCrawlerName].initialParameters().crawlerIndexingName + " job listener created");
+                var crawlingIndexName = module_instance[pathCrawlerName].initialParameters().crawlerIndexingName;
+                (function (crawlingMetadata) {
+                    CrawlerJob.jobQueue.process("page:" + pathCrawlerName, async function (job: Job, done: any) {
+                            console.log(JSON.stringify(job));
+                            let pageJob = <Page>job.data;
+
+                            await module_instance[pageJob.crawlingEngine].run(job, crawlingMetadata);
+                            done();
+
+                            // eval("new module_loader[\"" + pageJob.crawlingEngine + "\"]." + pageJob.crawlingEngine + "().load().run()");
+
+                            // console.log(job)
+                            // console.log(pageJob);
+                            // engine.run(job);
+                        }
+                    )
+                })(module_instance[pathCrawlerName].initialParameters());
             }
         }
-
-
-        jobQueue.process("page", function (job: Job) {
-            console.log(JSON.stringify(job));
-            let pageJob = <Page>job.data;
-
-            eval("new module_loader[\"" + pageJob.crawlingEngine + "\"]." + pageJob.crawlingEngine + "().load().run()");
-
-            console.log(job)
-            console.log(pageJob);
-            // engine.run(job);
-        })
     }
 }
