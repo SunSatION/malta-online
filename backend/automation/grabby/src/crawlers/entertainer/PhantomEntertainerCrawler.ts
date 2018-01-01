@@ -16,6 +16,7 @@ declare var $;
 
 declare var newPage: Page;
 
+
 export class PhantomEntertainerCrawler extends PhantomCrawler {
 
 
@@ -44,15 +45,20 @@ export class PhantomEntertainerCrawler extends PhantomCrawler {
         return null;
     }
 
-    async crawlerDetectChangeInPage(page: WebPage): Promise<string> {
-
+    async crawlerDetectChangeInSearchPage(page: WebPage): Promise<string> {
         let x = await page.evaluate(function () {
             return $('div.merchant').first().find('a').attr('title');
             // return JSON.stringify(jQuery(jQuery('div.merchant a')[0]).attr('title'));
         });
         return x;
-
     }
+
+    async crawlerDetectChangeInProductPage(page: WebPage): Promise<string> {
+        return Math.random().toString(36).substring(7);
+        ;
+    }
+
+
 
     async crawlerOnFinishCurrentExtract(page: WebPage): Promise<boolean> {
         /*
@@ -135,19 +141,19 @@ export class PhantomEntertainerCrawler extends PhantomCrawler {
 
     }
 
-    async extractProductInformationFromProductPage(page: WebPage): Promise<Array<Product & Page>> {
+    async extractProductInformationFromProductPage(page: WebPage): Promise<Array<Product>> {
         // console.log("product information");
-        return JSON.parse(await page.evaluate(function () {
+        var productInfo: any = JSON.parse(await page.evaluate(function () {
             if (jQuery('a#list_view').length == 0) {
-                var product: Product = new Product();
-                product = JSON.parse($('script[type="application/ld+json"]').first().text());
+                var product = <any>new Object();
+                product.d = JSON.parse($('script[type="application/ld+json"]').first().text());
                 product.title = jQuery('h1').first().text();
-                Object.assign(product, {
+                product.param1 = {
                     "attributes": jQuery('.services-list > ul > li').map(function () {
                         return $(this).text();
                     }).get()
-                });
-                Object.assign(product, {
+                }
+                product.param2 = {
                     "offers": $('.product-block').map(function (x) {
                         return {
                             "product": $(this).find('h2').first().text(),
@@ -158,12 +164,21 @@ export class PhantomEntertainerCrawler extends PhantomCrawler {
                             }).get()
                         }
                     }).get()
-                });
+                };
+
                 return JSON.stringify(product);
             } else {
                 return "[]";
             }
-        }))
+        }));
+        var productArray: Array<Product> = new Array<Product>();
+        var product: Product = new Product();
+        product = productInfo.d;
+        product.title = productInfo.title;
+        Object.assign(product, productInfo.param1);
+        Object.assign(product, productInfo.param2);
+        productArray.push(product);
+        return productArray;
     };
 
     /*
@@ -178,6 +193,11 @@ export class PhantomEntertainerCrawler extends PhantomCrawler {
         var s = new CrawlerMetadata();
         s.initialWebsite = "http://www.entertainerme.com";
         s.crawlerIndexingName = "entertainerme";
+        s.crawlerCronExpression = "0 18 0 * * *";
+        s.failedJobsReattampt = 2;
+        s.backoffMs = 30000;
+        s.jobTTLMs = 60000;
+        s.delayBetweenCallsMs = 10000;
         return s;
     }
 

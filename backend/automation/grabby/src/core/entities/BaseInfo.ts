@@ -1,3 +1,5 @@
+import {Job} from "kue";
+
 export class BaseInfo {
 
     title: string;
@@ -9,5 +11,7 @@ export class BaseInfo {
     type: string;
 
     crawlerIndexingName: string;
+
+    job: Job;
 
 }

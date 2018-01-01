@@ -34,14 +34,15 @@ async function main() {
 
     var crawlerJob = await new CrawlerJob();
     /*
-        var d = new Page();
-        d.exportDate = new Date().toISOString();
-        d.crawlingEngine = "PhantomEntertainerCrawler";
-        d.title = "Test";
-        d.pageUrl = "/outlets?SearchOutletsForm[location_id]=21";
-        d.baseUri = "https://www.theentertainerme.com";
+            var d = new Page();
+            d.exportDate = new Date().toISOString();
+            d.crawlingEngine = "PhantomEntertainerCrawler";
+            d.title = "Test";
+            d.pageUrl = "/outlets?SearchOutletsForm[location_id]=21";
+            d.baseUri = "https://www.theentertainerme.com";
+            d.type = "search_page";
+        crawlerJobQueue.create("page:PhantomEntertainerCrawler", d).save((x) => console.log(x))
     */
-//    crawlerJobQueue.create("search_page:PhantomEntertainerCrawler", d).save((x) => console.log(x))
     crawlerJob.run();
 
     /*
@@ -64,4 +65,9 @@ setInterval(function () {
 }, 2000)
 p.init()*/
 main();
+
+
+
+
+
 

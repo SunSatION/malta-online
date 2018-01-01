@@ -4,8 +4,6 @@ import {PhantomJS, WebPage} from "phantom";
 
 import {ICrawler} from "../../interfaces/ICrawler";
 import {Product} from "../../entities/Product";
-
-import * as es from "elasticsearch";
 import {Job} from "kue";
 import {CrawlerMetadata} from "../../entities/CrawlerMetadata";
 import {Page} from "../../entities/Page";
@@ -48,7 +46,9 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
     abstract crawlerWaitForElementProductPage(page: WebPage): Promise<boolean>;
 
-    abstract crawlerDetectChangeInPage(page: WebPage): Promise<string>;
+    abstract crawlerDetectChangeInSearchPage(page: WebPage): Promise<string>;
+
+    abstract crawlerDetectChangeInProductPage(page: WebPage): Promise<string>;
 
     abstract setEngineParameter(page: WebPage): Promise<null>;
 
@@ -81,12 +81,23 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
         })
     }
 
+    async loopForWaitForElementProductPage(this: PhantomCrawler, page: WebPage) {
+        return new Promise(resolve => {
+            this.crawlerWaitForElementProductPage(page).then((isPresent) => {
+                console.log("isPresent results: " + isPresent);
+                if (isPresent == true) {
+                    resolve();
+                }
+            });
+        })
+    }
+
     async timeout(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
 
-    async run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<null> {
+    async run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<Array<Array<Page | Product>>> {
 
         /*
                 jobQueue.process("page_" + this.crawlerIndexingName, function (job, done) {
@@ -94,13 +105,20 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
                 })
         */
 
+        let totalSteps: number = 10;
 
-        let currentSite = (<Page>job.data).baseUri + (<Page>job.data).pageUrl;
-        console.log("retrieved");
+        let currentSite = (<Page>job.data).pageUrl.indexOf('http') == 0 ? (<Page>job.data).pageUrl : (<Page>job.data).baseUri + (<Page>job.data).pageUrl;
+
+        console.log("Opening page: " + currentSite);
 
         await this.retrieveEngineInstance();
 
+        job.progress(1, totalSteps);
+
         const page: WebPage = await this.resourcePhantomPromise.createPage();
+
+        job.progress(2, totalSteps);
+
 
         await this.setEngineParameter(page);
 
@@ -110,7 +128,7 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
         console.log(await page.open(currentSite));
 
-        console.log("ma il mio mistero");
+        job.progress(3, totalSteps);
 
         let newSearchPageToAddToQueue: Array<Page> = new Array<Page>();
 
@@ -119,46 +137,61 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
         let newProductInformationToAddToQueue: Array<Product> = new Array<Product>();
 
         let pageJob: Page = (<Page>(job.data));
-
-        let currentProductsToSave: Array<Product> = new Array<Product>();
+        console.log(JSON.stringify(pageJob));
 
         do {
             let newValue: string = null;
-
+            let retryCount = 0;
             switch (pageJob.type) {
                 case "search_page":
 
                     await this.loopForWaitForElementSearchPage(page);
 
+                    job.progress(5, totalSteps);
+
                     newValue = null;
-                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null))) {
+
+                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null)) && retryCount < 10) {
                         console.log(newValue);
                         await this.timeout(200);
-                        page.render("debug.png");
-                        newValue = await this.crawlerDetectChangeInPage(page);
+                        // page.render("debug.png");
+                        newValue = await this.crawlerDetectChangeInSearchPage(page);
+                        retryCount = retryCount + 1;
                     }
+
+                    job.progress(6, totalSteps);
+
                     this.previousElementValueToDetectChange = newValue;
 
                     newSearchPageToAddToQueue = newSearchPageToAddToQueue.concat(await this.extractSearchPageFromSearchPage(page));
+                    job.progress(7, totalSteps);
                     newProductPageToAddToQueue = newProductPageToAddToQueue.concat(await this.extractProductPageFromSearchPage(page));
+                    job.progress(8, totalSteps);
                     newProductInformationToAddToQueue = newProductInformationToAddToQueue.concat(await this.extractProductInformationFromSearchPage(page));
+                    job.progress(9, totalSteps);
+
                     break;
                 case "product_page":
 
-                    await this.loopForWaitForElementSearchPage(page);
+                    await this.loopForWaitForElementProductPage(page);
 
                     newValue = null;
-                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null))) {
+                    while ((newValue === this.previousElementValueToDetectChange || (newValue === typeof undefined || newValue === null)) && retryCount < 10) {
                         console.log(newValue);
                         await this.timeout(200);
-                        page.render("debug.png");
-                        newValue = await this.crawlerDetectChangeInPage(page);
+                        //page.render("debug.png");
+                        newValue = await this.crawlerDetectChangeInProductPage(page);
+                        retryCount = retryCount + 1;
                     }
                     this.previousElementValueToDetectChange = newValue;
+                    job.progress(6, totalSteps);
 
                     newSearchPageToAddToQueue = newSearchPageToAddToQueue.concat(await this.extractSearchPageFromProductPage(page));
+                    job.progress(7, totalSteps);
                     newProductPageToAddToQueue = newProductPageToAddToQueue.concat(await this.extractProductPageFromProductPage(page));
+                    job.progress(8, totalSteps);
                     newProductInformationToAddToQueue = newProductInformationToAddToQueue.concat(await this.extractProductInformationFromProductPage(page));
+                    job.progress(9, totalSteps);
             }
 
 
@@ -172,56 +205,24 @@ export abstract class PhantomCrawler implements ICrawler<WebPage> {
 
             // currentProductsToSave = currentProductsToSave.concat(await this.extractProductInformation(page));
 
-            if (!this.transactionalSave) {
 
-                // create ElasticSearch Index
-                let esClient: es.Client = new es.Client({'host': 'localhost:9200'});
-                if (!(await esClient.indices.exists({index: crawlerMetadata.crawlerIndexingName}))) {
-                    await esClient.indices.create({
-                        index: crawlerMetadata.crawlerIndexingName
-                    });
-                }
 
-                // Save Products
-                for (let currentProduct of newProductInformationToAddToQueue) {
-                    console.log(esClient.index<Product>({
-                        index: crawlerMetadata.crawlerIndexingName,
-                        type: 'product',
-                        body: currentProduct
-                    }));
-                    console.log(currentProduct);
-                }
-
-                let currentPage: any;
-                while ((currentPage = newSearchPageToAddToQueue.pop()) != null) {
-                    // console.log("check exists - " + 'page:' + currentPage.crawlingEngine + ":" + crawlerMetadata.crawlerIndexingName, currentPage.pageUrl );
-                    CrawlerJob.redisClient.hexists('page:' + currentPage.crawlingEngine + ":" + crawlerMetadata.crawlerIndexingName, currentPage.pageUrl, function (err, exists) {
-                        if (!exists) {
-                            CrawlerJob.jobQueue.create('page:' + this.currentPage.crawlingEngine, this.currentPage).save(function (s) {
-                                // console.log('hset created - ' + 'page:' + this.currentPage.crawlingEngine + ":" + this.crawlerIndexingName, this.currentPage.pageUrl)
-                                CrawlerJob.redisClient.hset('page:' + this.currentPage.crawlingEngine + ":" + this.crawlerIndexingName, this.currentPage.pageUrl, new Date().toISOString(), function (d) {
-                                    console.log(d);
-                                });
-                            }.bind({currentPage: this.currentPage, crawlerIndexingName: this.crawlerIndexingName}));
-
-                            // console.log("added to queue");
-                        }
-                        return 0;
-                    }.bind({currentPage: currentPage, crawlerIndexingName: crawlerMetadata.crawlerIndexingName}))
-                }
-            }
         } while (await this.crawlerOnFinishCurrentExtract(page) == false)
 
 
         await page.close();
 
+        job.progress(10, totalSteps);
 
         await this.releaseEngineInstance();
+
+        return [newSearchPageToAddToQueue, newProductPageToAddToQueue, newProductInformationToAddToQueue];
+
         //await crawlerPhantomPool.drain();
         //await crawlerPhantomPool.clear();
         //CrawlerJob.jobQueue.shutdown(200, () => {
         //});
-        return null;
+
     }
 
 }

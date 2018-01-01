@@ -35,10 +35,11 @@ export interface ICrawler<T> {
 
     crawlerWaitForElementProductPage(page: T): Promise<boolean>;
 
-    crawlerDetectChangeInPage(page: T): Promise<string>;
+    crawlerDetectChangeInSearchPage(page: T): Promise<string>;
 
+    crawlerDetectChangeInProductPage(page: T): Promise<string>;
 
-    run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<null>
+    run(job: Job, crawlerMetadata: CrawlerMetadata): Promise<Array<Array<Page | Product>>>
 
 }
 
