@@ -1,19 +1,22 @@
 import * as genericPool from "generic-pool";
-import * as phantom from "phantom";
-import {PhantomJS} from "phantom";
+import {Pool} from "generic-pool";
+import {Curl} from "libcurl";
 
-export class CrawlerFactoryCURL implements genericPool.Factory<PhantomJS> {
+var Curl = require('node-libcurl').Curl;
+
+
+export class CurlCrawlerFactory implements genericPool.Factory<Curl> {
 
     constructor() {
 
     }
 
-    create(): Promise<PhantomJS> {
-        return phantom.create();
+    create(): Promise<Curl> {
+        return new Curl();
     }
 
-    destroy(client: PhantomJS): Promise<undefined> {
-        client.exit();
+    destroy(client: Curl): Promise<undefined> {
+        client.close();
         return null;
     }
 
@@ -21,4 +24,11 @@ export class CrawlerFactoryCURL implements genericPool.Factory<PhantomJS> {
         return null;
     }
 }
+
+export const crawlerCurlPool: Pool<Curl> = genericPool.createPool<Curl>(new CurlCrawlerFactory(), {
+    min: 1,
+    max: 5
+});
+
+
 

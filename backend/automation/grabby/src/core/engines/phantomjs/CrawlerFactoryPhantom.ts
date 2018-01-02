@@ -1,11 +1,12 @@
 import * as genericPool from "generic-pool";
+import {Pool} from "generic-pool";
 import * as phantom from "phantom";
 import {PhantomJS} from "phantom";
+
 
 export class PhantomCrawlerFactory implements genericPool.Factory<PhantomJS> {
 
     constructor() {
-
     }
 
     create(): Promise<PhantomJS> {
@@ -23,3 +24,7 @@ export class PhantomCrawlerFactory implements genericPool.Factory<PhantomJS> {
     }
 }
 
+export const crawlerPhantomPool: Pool<PhantomJS> = genericPool.createPool<PhantomJS>(new PhantomCrawlerFactory(), {
+    min: 1,
+    max: 5
+});

@@ -1,4 +1,4 @@
-import {crawlerPhantomPool} from "../../../crawlers/entertainer/PhantomEntertainerCrawler";
+import {crawlerPhantomPool} from "./CrawlerFactoryPhantom";
 import {PhantomJS, WebPage} from "phantom";
 
 
@@ -9,20 +9,16 @@ import {CrawlerMetadata} from "../../entities/CrawlerMetadata";
 import {Page} from "../../entities/Page";
 import {CrawlerJob} from "../../CrawlerJob";
 
-export abstract class PhantomCrawler implements ICrawler<WebPage> {
+export abstract class PhantomCrawler implements ICrawler<WebPage, WebPage> {
 
     private previousElementValueToDetectChange: string = null;
 
     private resourcePhantomPromise: PhantomJS = null;
 
-    private currentCrawlingSite: string = "https://www.theentertainerme.com/search-outlets/index?SearchOutletsForm%5Blocation_id%5D=21&page=10";
-
-    private transactionalSave: boolean = false;
-
     constructor() {
     }
 
-    load(crawlerMetadata: CrawlerMetadata): ICrawler<WebPage> {
+    load(crawlerMetadata: CrawlerMetadata): ICrawler<WebPage, WebPage> {
 
         console.log(this.constructor().toString() + " for  " + crawlerMetadata.crawlerIndexingName + " loaded.")
         return this;

@@ -1,4 +1,5 @@
 import {CrawlerJob} from "./core/CrawlerJob";
+import {Page} from "./core/entities/Page";
 
 
 const crawlerJobQueue = CrawlerJob.jobQueue;
@@ -33,14 +34,27 @@ async function main() {
 //jobQueue.procesxx)
 
     var crawlerJob = await new CrawlerJob();
+
+
+    var d = new Page();
+    d.exportDate = new Date().toISOString();
+    d.crawlingEngine = "CurlMaltaparkCrawler";
+    d.title = "Test";
+    d.pageUrl = "/listings.aspx?category=-1";
+    d.baseUri = "https://www.maltapark.com";
+    d.type = "search_page";
+    crawlerJobQueue.create("page:CurlMaltaparkCrawler", d).save((x) => console.log(x))
+
+
+
     /*
-            var d = new Page();
-            d.exportDate = new Date().toISOString();
-            d.crawlingEngine = "PhantomEntertainerCrawler";
-            d.title = "Test";
-            d.pageUrl = "/outlets?SearchOutletsForm[location_id]=21";
-            d.baseUri = "https://www.theentertainerme.com";
-            d.type = "search_page";
+        var d = new Page();
+        d.exportDate = new Date().toISOString();
+        d.crawlingEngine = "PhantomEntertainerCrawler";
+        d.title = "Test";
+        d.pageUrl = "/outlets?SearchOutletsForm[location_id]=21";
+        d.baseUri = "https://www.theentertainerme.com";
+        d.type = "search_page";
         crawlerJobQueue.create("page:PhantomEntertainerCrawler", d).save((x) => console.log(x))
     */
     crawlerJob.run();

@@ -8,15 +8,12 @@ import {Page} from "./entities/Page";
 import * as es from "elasticsearch";
 import {Product} from "./entities/Product";
 import {CrawlerMetadata} from "./entities/CrawlerMetadata";
-//import {Job} from "kue";
-//import {ICrawler} from "./interfaces/ICrawler";
-//import {PhantomCrawler} from "./engines/phantomjs/PhantomCrawler";
+
+let cronParser = require('cron-parser');
 
 let module_loader: Array<string> = new Array<string>();
 let module_instance: Array<any> = new Array<any>();
 
-let cronParser = require('cron-parser')
-;
 
 let redisConfig = {
     host: "localhost",
@@ -99,7 +96,6 @@ export class CrawlerJob {
                             endDate: new Date('2019-01-01T00:00:00'),
                             iterator: true
                         };
-
 
                         let interval = cronParser.parseExpression(crawlingMetadata.crawlerCronExpression, options);
                         let momentDate = interval.next().value._date;

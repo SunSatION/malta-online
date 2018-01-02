@@ -1,16 +1,9 @@
-import * as genericPool from "generic-pool";
-import {Pool} from "generic-pool";
-import {PhantomCrawlerFactory} from "../../core/engines/phantomjs/CrawlerFactoryPhantom";
-import {PhantomJS, WebPage} from "phantom";
+import {WebPage} from "phantom";
 import {PhantomCrawler} from "../../core/engines/phantomjs/PhantomCrawler";
 import {Product} from "../../core/entities/Product";
 import {CrawlerMetadata} from "../../core/entities/CrawlerMetadata"
 import {Page} from "../../core/entities/Page";
 
-export const crawlerPhantomPool: Pool<PhantomJS> = genericPool.createPool<PhantomJS>(new PhantomCrawlerFactory(), {
-    min: 1,
-    max: 5
-});
 
 declare var $;
 
